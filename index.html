@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Mobile-Friendly TXT Reader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    /* Dark background, white text */
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background-color: #000;
+      color: #fff;
+    }
+    #readerContainer {
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      min-height: 300px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      box-sizing: border-box;
+      padding: 10px;
+    }
+    .line {
+      margin: 0;
+      text-align: center;
+      word-wrap: break-word;
+    }
+
+    /* Page number + go button line */
+    #pageJumpContainer {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 10px 0;
+    }
+    #pageJumpContainer input {
+      width: 70px;
+      font-size: 16px;
+      margin-right: 5px;
+      color: #fff;
+      background: #333;
+      border: 1px solid #555;
+      padding: 4px;
+    }
+    #pageJumpContainer button {
+      padding: 8px 14px;
+      font-size: 16px;
+      cursor: pointer;
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+    }
+
+    #fileInputContainer {
+      text-align: center;
+      margin: 10px 0;
+    }
+    #fileInput {
+      font-size: 16px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      padding: 5px;
+    }
+
+    #fileListContainer {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    #fileListContainer button {
+      margin: 3px;
+      padding: 5px 10px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      cursor: pointer;
+    }
+
+    #pageInfo {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- The text display area at the top -->
+  <div id="readerContainer"></div>
+
+  <!-- Page number + "Go" button on its own line -->
+  <div id="pageJumpContainer">
+    <input type="number" id="pageNumberInput" min="1" />
+    <button id="goPageBtn">Go</button>
+  </div>
+
+  <!-- Page info (e.g. "Page X of Y") -->
+  <div id="pageInfo"></div>
+
+  <!-- File input (multiple) -->
+  <div id="fileInputContainer">
+    <input type="file" id="fileInput" multiple accept=".txt" />
+  </div>
+
+  <!-- List of stored files -->
+  <div id="fileListContainer">
+    <!-- Buttons for each stored file -->
+  </div>
+
+  <script>
+    /********************************************************
+     * Global Variables
+     ********************************************************/
+    const readerContainer = document.getElementById('readerContainer');
+    const goPageBtn = document.getElementById('goPageBtn');
+    const pageNumberInput = document.getElementById('pageNumberInput');
+    const pageInfo = document.getElementById('pageInfo');
+    const fileInput = document.getElementById('fileInput');
+    const fileListContainer = document.getElementById('fileListContainer');
+
+    let allWords = [];         // Current file's tokens
+    let currentPage = 0;
+    const LINES_PER_PAGE = 20;
+
+    let currentFileName = '';  // Which file is currently loaded
+    let storedFiles = [];      // [{ name, content, lastPage }, ...]
+
+    /********************************************************
+     * On Page Load: Read localStorage & Build UI
+     ********************************************************/
+    window.addEventListener('DOMContentLoaded', () => {
+      console.log('[DOMContentLoaded] Loading stored files...');
+      loadStoredFilesFromLocalStorage();
+      updateFileListUI();
+    });
+
+    /********************************************************
+     * File Input (for multiple .txt files)
+     ********************************************************/
+    fileInput.addEventListener('change', async () => {
+      const files = fileInput.files;
+      if (!files) return;
+
+      for (const file of files) {
+        const content = await readFileAsText(file);
+        console.log(`[FileInput] Loaded file "${file.name}" with length ${content.length}.`);
+        saveFileToLocalStorage(file.name, content);
+      }
+
+      // reload from localStorage and rebuild UI
+      loadStoredFilesFromLocalStorage();
+      updateFileListUI();
+
+      // Clear the file input
+      fileInput.value = '';
+    });
+
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = e => reject(e);
+        reader.readAsText(file);
+      });
+    }
+
+    /********************************************************
+     * LocalStorage: save/load
+     ********************************************************/
+    function saveFileToLocalStorage(name, content) {
+      let existing = localStorage.getItem('textFiles');
+      let arr = existing ? JSON.parse(existing) : [];
+
+      // check if the file name already exists
+      const idx = arr.findIndex(item => item.name === name);
+      if (idx >= 0) {
+        console.log(`[saveFileToLocalStorage] Overwriting file "${name}".`);
+        arr[idx].content = content;
+      } else {
+        console.log(`[saveFileToLocalStorage] Adding new file "${name}".`);
+        arr.push({ name, content, lastPage: 0 });
+      }
+      localStorage.setItem('textFiles', JSON.stringify(arr));
+    }
+
+    function loadStoredFilesFromLocalStorage() {
+      let existing = localStorage.getItem('textFiles');
+      storedFiles = existing ? JSON.parse(existing) : [];
+      console.log(`[loadStoredFilesFromLocalStorage] Found ${storedFiles.length} stored files.`);
+    }
+
+    function updateFileListUI() {
+      fileListContainer.innerHTML = '';
+      if (storedFiles.length === 0) {
+        fileListContainer.textContent = 'No stored files yet.';
+        return;
+      }
+
+      storedFiles.forEach(fileObj => {
+        const btn = document.createElement('button');
+        btn.textContent = fileObj.name;
+        btn.addEventListener('click', () => {
+          loadFileByName(fileObj.name);
+        });
+        fileListContainer.appendChild(btn);
+      });
+    }
+
+    function loadFileByName(name) {
+      const fileObj = storedFiles.find(item => item.name === name);
+      if (!fileObj) {
+        console.warn(`[loadFileByName] Could not find file "${name}".`);
+        return;
+      }
+      currentFileName = name;
+      console.log(`[loadFileByName] Loading file "${name}" with lastPage=${fileObj.lastPage}`);
+
+      // tokenizing
+      tokenizeAndLoad(fileObj.content);
+
+      // set currentPage to the saved lastPage
+      currentPage = fileObj.lastPage || 0;
+      displayPage();
+      updatePageInfo();
+    }
+
+    /********************************************************
+     * Tokenize & Display
+     ********************************************************/
+    function tokenizeAndLoad(text) {
+      // same dash-splitting regex
+      let tokens = text.match(/[^\s–—-]+|[–—-]+/g);
+      if (!tokens) tokens = [];
+      allWords = tokens;
+      console.log(`[tokenizeAndLoad] Found ${allWords.length} tokens.`);
+    }
+
+    // Build the page of text
+    function displayPage() {
+      readerContainer.innerHTML = '';
+
+      const startIndex = currentPage * LINES_PER_PAGE;
+      const endIndex = startIndex + LINES_PER_PAGE;
+      const pageWords = allWords.slice(startIndex, endIndex);
+
+      pageWords.forEach(word => {
+        const p = document.createElement('p');
+        p.className = 'line';
+        p.innerHTML = makeFirstCharacterBold(word);
+        readerContainer.appendChild(p);
+      });
+
+      updatePageInfo();
+      // We do NOT save here - we do it immediately in changePage() or the "Go" button instead
+    }
+
+    function makeFirstCharacterBold(word) {
+      if (!word) return '';
+      const first = word.charAt(0);
+      const rest = word.slice(1);
+      return `<strong>${first}</strong>${rest}`;
+    }
+
+    // Tapping left/right for page nav
+    readerContainer.addEventListener('click', (e) => {
+      const rect = readerContainer.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const halfWidth = rect.width / 2;
+
+      if (clickX < halfWidth) {
+        changePage(-1);
+      } else {
+        changePage(1);
+      }
+    });
+
+    // "Go" button => jump to page
+    goPageBtn.addEventListener('click', () => {
+      const pageNumber = parseInt(pageNumberInput.value, 10);
+      if (!pageNumber || pageNumber < 1) return;
+
+      const totalPages = Math.ceil(allWords.length / LINES_PER_PAGE);
+      const newPage = Math.min(totalPages, pageNumber) - 1; // clamp
+
+      console.log(`[goPageBtn] Jumping from page ${currentPage} to page ${newPage}.`);
+      currentPage = newPage;
+      displayPage();
+      saveCurrentPage();
+    });
+
+    /********************************************************
+     * Updated Pagination
+     ********************************************************/
+    function changePage(delta) {
+      const totalPages = Math.ceil(allWords.length / LINES_PER_PAGE);
+      const oldPage = currentPage;
+      currentPage += delta;
+
+      if (currentPage < 0) currentPage = 0;
+      if (currentPage >= totalPages) currentPage = totalPages - 1;
+
+      console.log(`[changePage] Changing page from ${oldPage} to ${currentPage} (delta=${delta}).`);
+      displayPage();
+      saveCurrentPage(); // Save as soon as we change page
+    }
+
+    /********************************************************
+     * Save & Restore "lastPage" for each file
+     ********************************************************/
+     function saveCurrentPage() {
+    if (!currentFileName) {
+      console.warn('[saveCurrentPage] No currentFileName set; cannot save page.');
+      return;
+    }
+
+    let existing = localStorage.getItem('textFiles');
+    if (!existing) {
+      console.warn('[saveCurrentPage] No "textFiles" in localStorage, so can’t save page.');
+      return;
+    }
+
+    let arr = JSON.parse(existing);
+    const idx = arr.findIndex(item => item.name === currentFileName);
+    if (idx >= 0) {
+      arr[idx].lastPage = currentPage;
+      localStorage.setItem('textFiles', JSON.stringify(arr));
+      console.log(`[saveCurrentPage] Saved page=${currentPage} for file "${currentFileName}".`);
+
+      // *** Fix: also update our in-memory array so it's in sync: ***
+      storedFiles = arr;  // <--- add this line
+      // Alternatively: storedFiles[idx].lastPage = currentPage;
+
+    } else {
+      console.warn(`[saveCurrentPage] Could not find file "${currentFileName}" in localStorage array.`);
+    }
+  }
+
+    function updatePageInfo() {
+      const totalPages = Math.max(1, Math.ceil(allWords.length / LINES_PER_PAGE));
+      pageInfo.textContent = `Page ${currentPage + 1} of ${totalPages}`;
+    }
+  </script>
+</body>
+</html>
