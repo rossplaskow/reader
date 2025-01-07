@@ -7,7 +7,7 @@
   <!-- Tells iOS Safari: open in standalone web-app mode -->
   <meta name="apple-mobile-web-app-capable" content="yes">
 
-<!-- Optional: define a default color for the status bar (where the clock is) -->
+  <!-- Optional: define a default color for the status bar (where the clock is) -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <style>
@@ -22,6 +22,7 @@
       width: 100%;
       max-width: 600px;
       margin: 0 auto;
+      /* Increased from 300px to 450px (50% bigger) */
       min-height: 450px;
       display: flex;
       flex-direction: column;
@@ -34,7 +35,7 @@
       margin: 0;
       text-align: center;
       word-wrap: break-word;
-      /* Increased font size by 50% */
+      /* 50% bigger font size */
       font-size: 1.5em;
     }
 
@@ -239,8 +240,11 @@
      * Tokenize & Display
      ********************************************************/
     function tokenizeAndLoad(text) {
-      // same dash-splitting regex
-      let tokens = text.match(/[^\s–—-]+|[–—-]+/g);
+      // NEW REGEX that:
+      // 1) Keeps words with internal ASCII hyphens together (co-op),
+      // 2) Splits runs of ASCII hyphens (-, --, ---) on their own line,
+      // 3) Splits en/em dashes (–, —) on their own line.
+      let tokens = text.match(/[^\s–—]+(?:-[^\s–—]+)*|[–—]+|-+/g);
       if (!tokens) tokens = [];
       allWords = tokens;
       console.log(`[tokenizeAndLoad] Found ${allWords.length} tokens.`);
@@ -318,33 +322,32 @@
     /********************************************************
      * Save & Restore "lastPage" for each file
      ********************************************************/
-     function saveCurrentPage() {
-    if (!currentFileName) {
-      console.warn('[saveCurrentPage] No currentFileName set; cannot save page.');
-      return;
+    function saveCurrentPage() {
+      if (!currentFileName) {
+        console.warn('[saveCurrentPage] No currentFileName set; cannot save page.');
+        return;
+      }
+
+      let existing = localStorage.getItem('textFiles');
+      if (!existing) {
+        console.warn('[saveCurrentPage] No "textFiles" in localStorage, so can’t save page.');
+        return;
+      }
+
+      let arr = JSON.parse(existing);
+      const idx = arr.findIndex(item => item.name === currentFileName);
+      if (idx >= 0) {
+        arr[idx].lastPage = currentPage;
+        localStorage.setItem('textFiles', JSON.stringify(arr));
+        console.log(`[saveCurrentPage] Saved page=${currentPage} for file "${currentFileName}".`);
+
+        // Keep in-memory array up to date
+        storedFiles = arr;
+
+      } else {
+        console.warn(`[saveCurrentPage] Could not find file "${currentFileName}" in localStorage array.`);
+      }
     }
-
-    let existing = localStorage.getItem('textFiles');
-    if (!existing) {
-      console.warn('[saveCurrentPage] No "textFiles" in localStorage, so can’t save page.');
-      return;
-    }
-
-    let arr = JSON.parse(existing);
-    const idx = arr.findIndex(item => item.name === currentFileName);
-    if (idx >= 0) {
-      arr[idx].lastPage = currentPage;
-      localStorage.setItem('textFiles', JSON.stringify(arr));
-      console.log(`[saveCurrentPage] Saved page=${currentPage} for file "${currentFileName}".`);
-
-      // *** Fix: also update our in-memory array so it's in sync: ***
-      storedFiles = arr;  // <--- add this line
-      // Alternatively: storedFiles[idx].lastPage = currentPage;
-
-    } else {
-      console.warn(`[saveCurrentPage] Could not find file "${currentFileName}" in localStorage array.`);
-    }
-  }
 
     function updatePageInfo() {
       const totalPages = Math.max(1, Math.ceil(allWords.length / LINES_PER_PAGE));
