@@ -115,9 +115,7 @@
   </div>
 
   <!-- List of stored files -->
-  <div id="fileListContainer">
-    <!-- Buttons for each stored file -->
-  </div>
+  <div id="fileListContainer"></div>
 
   <script>
     /********************************************************
@@ -240,14 +238,35 @@
      * Tokenize & Display
      ********************************************************/
     function tokenizeAndLoad(text) {
-      // NEW REGEX that:
-      // 1) Keeps words with internal ASCII hyphens together (co-op),
-      // 2) Splits runs of ASCII hyphens (-, --, ---) on their own line,
-      // 3) Splits en/em dashes (–, —) on their own line.
-      let tokens = text.match(/[^\s–—]+(?:-[^\s–—]+)*|[–—]+|-+/g);
-      if (!tokens) tokens = [];
-      allWords = tokens;
-      console.log(`[tokenizeAndLoad] Found ${allWords.length} tokens.`);
+      // 1) Split text into paragraphs by looking for blank lines
+      //    (two or more newlines).
+      const paragraphs = text.split(/\r?\n\r?\n+/);
+
+      let combinedTokens = [];
+
+      paragraphs.forEach(par => {
+        // Trim leading/trailing whitespace from paragraph
+        const trimmedPar = par.trim();
+        if (trimmedPar) {
+          // 2) For each paragraph, use the existing dash-splitting regex
+          //    that keeps internal ASCII hyphens together
+          const pTokens = trimmedPar.match(/[^\s–—]+(?:-[^\s–—]+)*|[–—]+|-+/g);
+          if (pTokens) {
+            combinedTokens.push(...pTokens);
+          }
+        }
+        // 3) Then add an empty string token to represent a blank line
+        //    after the paragraph
+        combinedTokens.push("");
+      });
+
+      // Optionally remove trailing blank token if it exists
+      if (combinedTokens.length > 0 && combinedTokens[combinedTokens.length - 1] === "") {
+        combinedTokens.pop();
+      }
+
+      allWords = combinedTokens;
+      console.log(`[tokenizeAndLoad] Found ${allWords.length} tokens (including blank lines).`);
     }
 
     // Build the page of text
@@ -261,7 +280,16 @@
       pageWords.forEach(word => {
         const p = document.createElement('p');
         p.className = 'line';
-        p.innerHTML = makeFirstCharacterBold(word);
+
+        if (word === "") {
+          // This represents a blank line.
+          p.innerHTML = "&nbsp;"; 
+          // or p.textContent = ""; but &nbsp; ensures it's visible as a line
+        } else {
+          // Bold the first character
+          p.innerHTML = makeFirstCharacterBold(word);
+        }
+
         readerContainer.appendChild(p);
       });
 
