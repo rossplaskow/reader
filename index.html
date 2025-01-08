@@ -5,7 +5,7 @@
   <title>Mobile-Friendly TXT Reader (IndexedDB Version)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Tells iOS Safari: open in standalone web-app mode -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <!-- Optional: define a default color for the status bar -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -143,6 +143,7 @@
      * 1) Init IndexedDB
      * 2) Fetch each file & store in DB if possible
      * 3) Load from DB to build file list
+     * 4) Auto-load the last opened file (if any)
      ********************************************************/
     window.addEventListener('DOMContentLoaded', async () => {
       console.log('[DOMContentLoaded] Initializing IndexedDB...');
@@ -155,6 +156,13 @@
         await loadStoredFilesFromIndexedDB();
         // 3) Update the file list UI
         updateFileListUI();
+
+        // Auto-load the last opened file from localStorage
+        const lastFile = localStorage.getItem('lastOpenedFile');
+        if (lastFile) {
+          console.log(`[DOMContentLoaded] Auto-loading lastOpenedFile: ${lastFile}`);
+          loadFileByName(lastFile);
+        }
       } catch (err) {
         console.error('Error during initialization:', err);
       }
@@ -190,22 +198,42 @@
     /********************************************************
      * 1) Fetch & Store .txt files in IndexedDB
      ********************************************************/
-    async function fetchAndStoreFiles() {
-      for (const fileName of FILE_NAMES) {
-        try {
-          const response = await fetch(fileName, { cache: 'reload' });
-          if (!response.ok) {
-            throw new Error(`Network response was not ok for ${fileName}`);
-          }
-          const textContent = await response.text();
-          console.log(`[fetchAndStoreFiles] Fetched "${fileName}" (length=${textContent.length}).`);
-          await saveFileToIndexedDB(fileName, textContent, 0);
-        } catch (err) {
-          console.warn(`[fetchAndStoreFiles] Could NOT fetch "${fileName}" => ${err.message}`);
-          // If offline or file missing, just skip
-        }
+     async function fetchAndStoreFiles() {
+  for (const fileName of FILE_NAMES) {
+    try {
+      const response = await fetch(fileName, { cache: 'reload' });
+      if (!response.ok) {
+        throw new Error(`Network response was not ok for ${fileName}`);
       }
+      const textContent = await response.text();
+      console.log(`[fetchAndStoreFiles] Fetched "${fileName}" (length=${textContent.length}).`);
+
+      // 1) Before overwriting, get existing record from DB:
+      const oldRecord = await getFileFromDB(fileName);
+      const oldLastPage = oldRecord ? oldRecord.lastPage : 0;
+
+      // 2) Now store updated text, but preserve lastPage:
+      await saveFileToIndexedDB(fileName, textContent, oldLastPage);
+
+    } catch (err) {
+      console.warn(`[fetchAndStoreFiles] Could NOT fetch "${fileName}" => ${err.message}`);
+      // If offline or file missing, just skip
     }
+  }
+}
+
+function getFileFromDB(fileName) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.get(fileName);
+    
+    request.onsuccess = () => {
+      resolve(request.result); // Might be undefined if not in DB yet
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
 
     /********************************************************
      * 2) Save file content into IndexedDB
@@ -219,7 +247,6 @@
         store.put({ name, content, lastPage });
 
         tx.oncomplete = () => {
-          // console.log(`[saveFileToIndexedDB] Stored "${name}" in DB.`);
           resolve();
         };
         tx.onerror = () => reject(tx.error);
@@ -245,7 +272,7 @@
     }
 
     /********************************************************
-     * 4) Build UI: file list
+     * Build UI: file list
      ********************************************************/
     function updateFileListUI() {
       fileListContainer.innerHTML = '';
@@ -275,6 +302,9 @@
         return;
       }
       currentFileName = name;
+      // Remember which file is open
+      localStorage.setItem('lastOpenedFile', currentFileName);
+
       console.log(`[loadFileByName] Loading file "${name}" with lastPage=${fileObj.lastPage}`);
 
       // Tokenize
@@ -284,6 +314,9 @@
       currentPage = fileObj.lastPage || 0;
       displayPage();
       updatePageInfo();
+
+      // If you want to ensure we store this “entry” page immediately, uncomment:
+      // saveCurrentPage();
     }
 
     /********************************************************
@@ -336,7 +369,6 @@
           // Bold the first character
           p.innerHTML = makeFirstCharacterBold(word);
         }
-
         readerContainer.appendChild(p);
       });
 
@@ -414,6 +446,7 @@
         return;
       }
       storedFiles[idx].lastPage = currentPage;
+
       // Also update in DB
       saveFileToIndexedDB(
         currentFileName,
