@@ -22,8 +22,8 @@
       width: 100%;
       max-width: 600px;
       margin: 0 auto;
-      /* Increased from 300px to 450px (50% bigger) */
-      min-height: 450px;
+      /* Increased the min-height from 450px by 25% => ~562px */
+      min-height: 562px;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -35,8 +35,8 @@
       margin: 0;
       text-align: center;
       word-wrap: break-word;
-      /* 50% bigger font size */
-      font-size: 1.5em;
+      /* Increased from 1.5em by 25% => 1.875em */
+      font-size: 1.875em;
     }
 
     /* Page number + go button line */
@@ -62,18 +62,6 @@
       background: #333;
       color: #fff;
       border: 1px solid #555;
-    }
-
-    #fileInputContainer {
-      text-align: center;
-      margin: 10px 0;
-    }
-    #fileInput {
-      font-size: 16px;
-      background: #333;
-      color: #fff;
-      border: 1px solid #555;
-      padding: 5px;
     }
 
     #fileListContainer {
@@ -109,12 +97,7 @@
   <!-- Page info (e.g. "Page X of Y") -->
   <div id="pageInfo"></div>
 
-  <!-- File input (multiple) -->
-  <div id="fileInputContainer">
-    <input type="file" id="fileInput" multiple accept=".txt" />
-  </div>
-
-  <!-- List of stored files -->
+  <!-- List of stored files (from the root directory) -->
   <div id="fileListContainer"></div>
 
   <script>
@@ -125,57 +108,58 @@
     const goPageBtn = document.getElementById('goPageBtn');
     const pageNumberInput = document.getElementById('pageNumberInput');
     const pageInfo = document.getElementById('pageInfo');
-    const fileInput = document.getElementById('fileInput');
     const fileListContainer = document.getElementById('fileListContainer');
+
+    // Hard-coded list of .txt files in your root directory
+    // (Adjust to your actual filenames, e.g. "chapter1.txt", etc.)
+    const FILE_NAMES = ["burmese_days.txt", "crime_and_punishment.txt",
+                        "down_out_in_paris_london.txt", "homage_to_catalonia.txt", 
+                        "shooting_an_elephant.txt", "heart_of_darkness.txt"
+    ];
 
     let allWords = [];         // Current file's tokens
     let currentPage = 0;
-    const LINES_PER_PAGE = 20;
+    const WORDS_PER_PAGE = 15; // 15 tokens per "page"
 
     let currentFileName = '';  // Which file is currently loaded
     let storedFiles = [];      // [{ name, content, lastPage }, ...]
 
     /********************************************************
-     * On Page Load: Read localStorage & Build UI
+     * On Page Load:
+     * 1) Attempt to fetch each file from root
+     * 2) Save to localStorage if new/updated
+     * 3) Load from localStorage
+     * 4) Build UI
      ********************************************************/
-    window.addEventListener('DOMContentLoaded', () => {
-      console.log('[DOMContentLoaded] Loading stored files...');
-      loadStoredFilesFromLocalStorage();
-      updateFileListUI();
+    window.addEventListener('DOMContentLoaded', async () => {
+      console.log('[DOMContentLoaded] Attempting to fetch files from root...');
+      await fetchAndStoreFiles();             // Fetch & store (if online)
+      loadStoredFilesFromLocalStorage();      // Then load from localStorage
+      updateFileListUI();                     // Build the list of files
     });
 
     /********************************************************
-     * File Input (for multiple .txt files)
+     * 1) Fetch & Store .txt files
      ********************************************************/
-    fileInput.addEventListener('change', async () => {
-      const files = fileInput.files;
-      if (!files) return;
-
-      for (const file of files) {
-        const content = await readFileAsText(file);
-        console.log(`[FileInput] Loaded file "${file.name}" with length ${content.length}.`);
-        saveFileToLocalStorage(file.name, content);
+    async function fetchAndStoreFiles() {
+      for (const fileName of FILE_NAMES) {
+        try {
+          const response = await fetch(fileName, { cache: 'reload' });
+          if (!response.ok) {
+            throw new Error(`Network response was not ok for ${fileName}`);
+          }
+          const textContent = await response.text();
+          console.log(`[fetchAndStoreFiles] Fetched "${fileName}" (length=${textContent.length}).`);
+          saveFileToLocalStorage(fileName, textContent);
+        } catch (err) {
+          // Probably offline or the file doesn't exist
+          console.warn(`[fetchAndStoreFiles] Could NOT fetch "${fileName}" => ${err.message}`);
+        }
       }
-
-      // reload from localStorage and rebuild UI
-      loadStoredFilesFromLocalStorage();
-      updateFileListUI();
-
-      // Clear the file input
-      fileInput.value = '';
-    });
-
-    function readFileAsText(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.onerror = e => reject(e);
-        reader.readAsText(file);
-      });
     }
 
     /********************************************************
-     * LocalStorage: save/load
+     * 2) Save file content to localStorage
      ********************************************************/
     function saveFileToLocalStorage(name, content) {
       let existing = localStorage.getItem('textFiles');
@@ -193,12 +177,18 @@
       localStorage.setItem('textFiles', JSON.stringify(arr));
     }
 
+    /********************************************************
+     * 3) Load stored files from localStorage
+     ********************************************************/
     function loadStoredFilesFromLocalStorage() {
       let existing = localStorage.getItem('textFiles');
       storedFiles = existing ? JSON.parse(existing) : [];
       console.log(`[loadStoredFilesFromLocalStorage] Found ${storedFiles.length} stored files.`);
     }
 
+    /********************************************************
+     * 4) Build UI: file list
+     ********************************************************/
     function updateFileListUI() {
       fileListContainer.innerHTML = '';
       if (storedFiles.length === 0) {
@@ -216,6 +206,9 @@
       });
     }
 
+    /********************************************************
+     * Loading a file
+     ********************************************************/
     function loadFileByName(name) {
       const fileObj = storedFiles.find(item => item.name === name);
       if (!fileObj) {
@@ -248,19 +241,17 @@
         // Trim leading/trailing whitespace from paragraph
         const trimmedPar = par.trim();
         if (trimmedPar) {
-          // 2) For each paragraph, use the existing dash-splitting regex
-          //    that keeps internal ASCII hyphens together
+          // 2) For each paragraph, use a regex that keeps hyphenated words together
           const pTokens = trimmedPar.match(/[^\s–—]+(?:-[^\s–—]+)*|[–—]+|-+/g);
           if (pTokens) {
             combinedTokens.push(...pTokens);
           }
         }
-        // 3) Then add an empty string token to represent a blank line
-        //    after the paragraph
+        // 3) Add an empty string token to represent a blank line after the paragraph
         combinedTokens.push("");
       });
 
-      // Optionally remove trailing blank token if it exists
+      // Remove trailing blank token if it exists
       if (combinedTokens.length > 0 && combinedTokens[combinedTokens.length - 1] === "") {
         combinedTokens.pop();
       }
@@ -273,8 +264,8 @@
     function displayPage() {
       readerContainer.innerHTML = '';
 
-      const startIndex = currentPage * LINES_PER_PAGE;
-      const endIndex = startIndex + LINES_PER_PAGE;
+      const startIndex = currentPage * WORDS_PER_PAGE;
+      const endIndex = startIndex + WORDS_PER_PAGE;
       const pageWords = allWords.slice(startIndex, endIndex);
 
       pageWords.forEach(word => {
@@ -282,9 +273,8 @@
         p.className = 'line';
 
         if (word === "") {
-          // This represents a blank line.
-          p.innerHTML = "&nbsp;"; 
-          // or p.textContent = ""; but &nbsp; ensures it's visible as a line
+          // This represents a blank line
+          p.innerHTML = "&nbsp;";
         } else {
           // Bold the first character
           p.innerHTML = makeFirstCharacterBold(word);
@@ -294,7 +284,6 @@
       });
 
       updatePageInfo();
-      // We do NOT save here - we do it immediately in changePage() or the "Go" button instead
     }
 
     function makeFirstCharacterBold(word) {
@@ -304,25 +293,31 @@
       return `<strong>${first}</strong>${rest}`;
     }
 
-    // Tapping left/right for page nav
+    /********************************************************
+     * Tapping top/bottom for page nav
+     ********************************************************/
     readerContainer.addEventListener('click', (e) => {
       const rect = readerContainer.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const halfWidth = rect.width / 2;
+      const clickY = e.clientY - rect.top;
+      const halfHeight = rect.height / 2;
 
-      if (clickX < halfWidth) {
+      // If user taps top half => go back one page
+      // If user taps bottom half => go forward one page
+      if (clickY < halfHeight) {
         changePage(-1);
       } else {
         changePage(1);
       }
     });
 
-    // "Go" button => jump to page
+    /********************************************************
+     * "Go" button => jump to page
+     ********************************************************/
     goPageBtn.addEventListener('click', () => {
       const pageNumber = parseInt(pageNumberInput.value, 10);
       if (!pageNumber || pageNumber < 1) return;
 
-      const totalPages = Math.ceil(allWords.length / LINES_PER_PAGE);
+      const totalPages = Math.ceil(allWords.length / WORDS_PER_PAGE);
       const newPage = Math.min(totalPages, pageNumber) - 1; // clamp
 
       console.log(`[goPageBtn] Jumping from page ${currentPage} to page ${newPage}.`);
@@ -335,7 +330,7 @@
      * Updated Pagination
      ********************************************************/
     function changePage(delta) {
-      const totalPages = Math.ceil(allWords.length / LINES_PER_PAGE);
+      const totalPages = Math.ceil(allWords.length / WORDS_PER_PAGE);
       const oldPage = currentPage;
       currentPage += delta;
 
@@ -371,14 +366,13 @@
 
         // Keep in-memory array up to date
         storedFiles = arr;
-
       } else {
         console.warn(`[saveCurrentPage] Could not find file "${currentFileName}" in localStorage array.`);
       }
     }
 
     function updatePageInfo() {
-      const totalPages = Math.max(1, Math.ceil(allWords.length / LINES_PER_PAGE));
+      const totalPages = Math.max(1, Math.ceil(allWords.length / WORDS_PER_PAGE));
       pageInfo.textContent = `Page ${currentPage + 1} of ${totalPages}`;
     }
   </script>
