@@ -2,12 +2,11 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Mobile-Friendly TXT Reader</title>
+  <title>Mobile-Friendly TXT Reader (IndexedDB Version)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Tells iOS Safari: open in standalone web-app mode -->
   <meta name="apple-mobile-web-app-capable" content="yes">
-
-  <!-- Optional: define a default color for the status bar (where the clock is) -->
+  <!-- Optional: define a default color for the status bar -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <style>
@@ -111,38 +110,85 @@
     const fileListContainer = document.getElementById('fileListContainer');
 
     // Hard-coded list of .txt files in your root directory
-    // (Adjust to your actual filenames, e.g. "chapter1.txt", etc.)
-    const FILE_NAMES = ["burmese_days.txt", "crime_and_punishment.txt",
-                        "down_out_in_paris_london.txt", "homage_to_catalonia.txt", 
-                        "shooting_an_elephant.txt", "heart_of_darkness.txt",
-                        "all_the_pretty_horses.txt", "Exhalation.txt",
-                        "Three-Body-Problem.txt", "broken_money.txt", "GOT.txt",
-                        "no_country_for_old_men.txt"
+    const FILE_NAMES = [
+      "burmese_days.txt", 
+      "crime_and_punishment.txt",
+      "down_out_in_paris_london.txt", 
+      "homage_to_catalonia.txt", 
+      "shooting_an_elephant.txt", 
+      "heart_of_darkness.txt",
+      "all_the_pretty_horses.txt", 
+      "Exhalation.txt",
+      "Three-Body-Problem.txt", 
+      "broken_money.txt", 
+      "GOT.txt",
+      "no_country_for_old_men.txt"
     ];
 
-    let allWords = [];         // Current file's tokens
+    // IndexedDB config
+    const DB_NAME = 'myEreaderDB';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'textFiles';
+
+    let db;                // will hold our IndexedDB instance
+    let allWords = [];     // Current file's tokens
     let currentPage = 0;
     const WORDS_PER_PAGE = 15; // 15 tokens per "page"
 
     let currentFileName = '';  // Which file is currently loaded
-    let storedFiles = [];      // [{ name, content, lastPage }, ...]
+    let storedFiles = [];      // In-memory: [{ name, content, lastPage }, ...]
 
     /********************************************************
-     * On Page Load:
-     * 1) Attempt to fetch each file from root
-     * 2) Save to localStorage if new/updated
-     * 3) Load from localStorage
-     * 4) Build UI
+     * On Page Load (DOMContentLoaded):
+     * 1) Init IndexedDB
+     * 2) Fetch each file & store in DB if possible
+     * 3) Load from DB to build file list
      ********************************************************/
     window.addEventListener('DOMContentLoaded', async () => {
-      console.log('[DOMContentLoaded] Attempting to fetch files from root...');
-      await fetchAndStoreFiles();             // Fetch & store (if online)
-      loadStoredFilesFromLocalStorage();      // Then load from localStorage
-      updateFileListUI();                     // Build the list of files
+      console.log('[DOMContentLoaded] Initializing IndexedDB...');
+      try {
+        await initIndexedDB();
+        console.log('[DOMContentLoaded] Attempting to fetch files from root...');
+        // 1) Fetch & store files in DB (if online)
+        await fetchAndStoreFiles();
+        // 2) Load the file metadata from DB
+        await loadStoredFilesFromIndexedDB();
+        // 3) Update the file list UI
+        updateFileListUI();
+      } catch (err) {
+        console.error('Error during initialization:', err);
+      }
     });
 
     /********************************************************
-     * 1) Fetch & Store .txt files
+     * IndexedDB Initialization
+     ********************************************************/
+    function initIndexedDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onerror = (event) => {
+          console.error('[initIndexedDB] Error opening DB:', event.target.error);
+          reject(event.target.error);
+        };
+
+        request.onupgradeneeded = (event) => {
+          db = event.target.result;
+          // Create the object store if it doesn't exist
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: 'name' });
+          }
+        };
+
+        request.onsuccess = (event) => {
+          db = event.target.result;
+          resolve();
+        };
+      });
+    }
+
+    /********************************************************
+     * 1) Fetch & Store .txt files in IndexedDB
      ********************************************************/
     async function fetchAndStoreFiles() {
       for (const fileName of FILE_NAMES) {
@@ -153,40 +199,49 @@
           }
           const textContent = await response.text();
           console.log(`[fetchAndStoreFiles] Fetched "${fileName}" (length=${textContent.length}).`);
-          saveFileToLocalStorage(fileName, textContent);
+          await saveFileToIndexedDB(fileName, textContent, 0);
         } catch (err) {
-          // Probably offline or the file doesn't exist
           console.warn(`[fetchAndStoreFiles] Could NOT fetch "${fileName}" => ${err.message}`);
+          // If offline or file missing, just skip
         }
       }
     }
 
     /********************************************************
-     * 2) Save file content to localStorage
+     * 2) Save file content into IndexedDB
      ********************************************************/
-    function saveFileToLocalStorage(name, content) {
-      let existing = localStorage.getItem('textFiles');
-      let arr = existing ? JSON.parse(existing) : [];
+    function saveFileToIndexedDB(name, content, lastPage) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
 
-      // check if the file name already exists
-      const idx = arr.findIndex(item => item.name === name);
-      if (idx >= 0) {
-        console.log(`[saveFileToLocalStorage] Overwriting file "${name}".`);
-        arr[idx].content = content;
-      } else {
-        console.log(`[saveFileToLocalStorage] Adding new file "${name}".`);
-        arr.push({ name, content, lastPage: 0 });
-      }
-      localStorage.setItem('textFiles', JSON.stringify(arr));
+        // Upsert { name, content, lastPage }
+        store.put({ name, content, lastPage });
+
+        tx.oncomplete = () => {
+          // console.log(`[saveFileToIndexedDB] Stored "${name}" in DB.`);
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      });
     }
 
     /********************************************************
-     * 3) Load stored files from localStorage
+     * 3) Load all stored files from IndexedDB
      ********************************************************/
-    function loadStoredFilesFromLocalStorage() {
-      let existing = localStorage.getItem('textFiles');
-      storedFiles = existing ? JSON.parse(existing) : [];
-      console.log(`[loadStoredFilesFromLocalStorage] Found ${storedFiles.length} stored files.`);
+    function loadStoredFilesFromIndexedDB() {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          storedFiles = request.result; // e.g. [{ name, content, lastPage }, ...]
+          console.log(`[loadStoredFilesFromIndexedDB] Found ${storedFiles.length} stored files.`);
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
     }
 
     /********************************************************
@@ -210,9 +265,10 @@
     }
 
     /********************************************************
-     * Loading a file
+     * Load a file by name (from in-memory array),
+     * then display the content
      ********************************************************/
-    function loadFileByName(name) {
+    async function loadFileByName(name) {
       const fileObj = storedFiles.find(item => item.name === name);
       if (!fileObj) {
         console.warn(`[loadFileByName] Could not find file "${name}".`);
@@ -221,10 +277,10 @@
       currentFileName = name;
       console.log(`[loadFileByName] Loading file "${name}" with lastPage=${fileObj.lastPage}`);
 
-      // tokenizing
+      // Tokenize
       tokenizeAndLoad(fileObj.content);
 
-      // set currentPage to the saved lastPage
+      // Set currentPage to the saved lastPage
       currentPage = fileObj.lastPage || 0;
       displayPage();
       updatePageInfo();
@@ -235,32 +291,30 @@
      ********************************************************/
     function tokenizeAndLoad(text) {
       // 1) Split text into paragraphs by looking for blank lines
-      //    (two or more newlines).
       const paragraphs = text.split(/\r?\n\r?\n+/);
 
       let combinedTokens = [];
 
       paragraphs.forEach(par => {
-        // Trim leading/trailing whitespace from paragraph
         const trimmedPar = par.trim();
         if (trimmedPar) {
-          // 2) For each paragraph, use a regex that keeps hyphenated words together
+          // 2) Regex that keeps hyphenated words together
           const pTokens = trimmedPar.match(/[^\s–—]+(?:-[^\s–—]+)*|[–—]+|-+/g);
           if (pTokens) {
             combinedTokens.push(...pTokens);
           }
         }
-        // 3) Add an empty string token to represent a blank line after the paragraph
+        // 3) Add empty string to represent blank line
         combinedTokens.push("");
       });
 
-      // Remove trailing blank token if it exists
+      // Remove trailing blank if any
       if (combinedTokens.length > 0 && combinedTokens[combinedTokens.length - 1] === "") {
         combinedTokens.pop();
       }
 
       allWords = combinedTokens;
-      console.log(`[tokenizeAndLoad] Found ${allWords.length} tokens (including blank lines).`);
+      console.log(`[tokenizeAndLoad] Found ${allWords.length} tokens (incl. blank lines).`);
     }
 
     // Build the page of text
@@ -346,32 +400,32 @@
     }
 
     /********************************************************
-     * Save & Restore "lastPage" for each file
+     * Save & Restore "lastPage" for each file (in IndexedDB)
      ********************************************************/
     function saveCurrentPage() {
       if (!currentFileName) {
         console.warn('[saveCurrentPage] No currentFileName set; cannot save page.');
         return;
       }
-
-      let existing = localStorage.getItem('textFiles');
-      if (!existing) {
-        console.warn('[saveCurrentPage] No "textFiles" in localStorage, so can’t save page.');
+      // Update in storedFiles
+      const idx = storedFiles.findIndex(item => item.name === currentFileName);
+      if (idx < 0) {
+        console.warn(`[saveCurrentPage] Could not find file "${currentFileName}" in storedFiles array.`);
         return;
       }
-
-      let arr = JSON.parse(existing);
-      const idx = arr.findIndex(item => item.name === currentFileName);
-      if (idx >= 0) {
-        arr[idx].lastPage = currentPage;
-        localStorage.setItem('textFiles', JSON.stringify(arr));
-        console.log(`[saveCurrentPage] Saved page=${currentPage} for file "${currentFileName}".`);
-
-        // Keep in-memory array up to date
-        storedFiles = arr;
-      } else {
-        console.warn(`[saveCurrentPage] Could not find file "${currentFileName}" in localStorage array.`);
-      }
+      storedFiles[idx].lastPage = currentPage;
+      // Also update in DB
+      saveFileToIndexedDB(
+        currentFileName,
+        storedFiles[idx].content,
+        currentPage
+      )
+      .then(() => {
+        console.log(`[saveCurrentPage] Saved page=${currentPage} for file "${currentFileName}" in DB.`);
+      })
+      .catch(err => {
+        console.error('[saveCurrentPage] Error saving page:', err);
+      });
     }
 
     function updatePageInfo() {
