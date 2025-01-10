@@ -376,10 +376,7 @@ function getFileFromDB(fileName) {
     }
 
     function makeFirstCharacterBold(word) {
-      if (!word) return '';
-      const first = word.charAt(0);
-      const rest = word.slice(1);
-      return `<strong>${first}</strong>${rest}`;
+      return word;
     }
 
     /********************************************************
