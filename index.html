@@ -207,42 +207,42 @@
     /********************************************************
      * 1) Fetch & Store .txt files in IndexedDB
      ********************************************************/
-     async function fetchAndStoreFiles() {
-  for (const fileName of FILE_NAMES) {
-    try {
-      const response = await fetch(fileName, { cache: 'reload' });
-      if (!response.ok) {
-        throw new Error(`Network response was not ok for ${fileName}`);
+    async function fetchAndStoreFiles() {
+      for (const fileName of FILE_NAMES) {
+        try {
+          const response = await fetch(fileName, { cache: 'reload' });
+          if (!response.ok) {
+            throw new Error(`Network response was not ok for ${fileName}`);
+          }
+          const textContent = await response.text();
+          console.log(`[fetchAndStoreFiles] Fetched "${fileName}" (length=${textContent.length}).`);
+
+          // 1) Before overwriting, get existing record from DB:
+          const oldRecord = await getFileFromDB(fileName);
+          const oldLastPage = oldRecord ? oldRecord.lastPage : 0;
+
+          // 2) Now store updated text, but preserve lastPage:
+          await saveFileToIndexedDB(fileName, textContent, oldLastPage);
+
+        } catch (err) {
+          console.warn(`[fetchAndStoreFiles] Could NOT fetch "${fileName}" => ${err.message}`);
+          // If offline or file missing, just skip
+        }
       }
-      const textContent = await response.text();
-      console.log(`[fetchAndStoreFiles] Fetched "${fileName}" (length=${textContent.length}).`);
-
-      // 1) Before overwriting, get existing record from DB:
-      const oldRecord = await getFileFromDB(fileName);
-      const oldLastPage = oldRecord ? oldRecord.lastPage : 0;
-
-      // 2) Now store updated text, but preserve lastPage:
-      await saveFileToIndexedDB(fileName, textContent, oldLastPage);
-
-    } catch (err) {
-      console.warn(`[fetchAndStoreFiles] Could NOT fetch "${fileName}" => ${err.message}`);
-      // If offline or file missing, just skip
     }
-  }
-}
 
-function getFileFromDB(fileName) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.get(fileName);
-    
-    request.onsuccess = () => {
-      resolve(request.result); // Might be undefined if not in DB yet
-    };
-    request.onerror = () => reject(request.error);
-  });
-}
+    function getFileFromDB(fileName) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(fileName);
+        
+        request.onsuccess = () => {
+          resolve(request.result); // Might be undefined if not in DB yet
+        };
+        request.onerror = () => reject(request.error);
+      });
+    }
 
     /********************************************************
      * 2) Save file content into IndexedDB
@@ -389,20 +389,44 @@ function getFileFromDB(fileName) {
     }
 
     /********************************************************
-     * Tapping top/bottom for page nav
+     * Updated Touch & Click for Page Navigation
+     *
+     * - Tap anywhere on the text box to scroll forward (page +1).
+     * - A swipe in any direction (if movement exceeds the threshold)
+     *   scrolls back one page (page -1).
      ********************************************************/
-    readerContainer.addEventListener('click', (e) => {
-      const rect = readerContainer.getBoundingClientRect();
-      const clickY = e.clientY - rect.top;
-      const halfHeight = rect.height / 2;
 
-      // If user taps top half => go back one page
-      // If user taps bottom half => go forward one page
-      if (clickY < halfHeight) {
-        changePage(-1);
-      } else {
-        changePage(1);
+    let touchStartX = 0, touchStartY = 0;
+    let swiped = false;
+
+    // Record the starting touch coordinates.
+    readerContainer.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    });
+
+    // When the touch ends, check if the movement qualifies as a swipe.
+    readerContainer.addEventListener('touchend', (e) => {
+      const touchEndX = e.changedTouches[0].clientX;
+      const touchEndY = e.changedTouches[0].clientY;
+      const deltaX = touchEndX - touchStartX;
+      const deltaY = touchEndY - touchStartY;
+      const threshold = 30; // Minimum movement (in pixels) to be considered a swipe
+
+      if (Math.abs(deltaX) > threshold || Math.abs(deltaY) > threshold) {
+        swiped = true;
+        changePage(-1); // any swipe gesture => go back one page
+        e.preventDefault(); // Prevent the subsequent click event from firing
       }
+    });
+
+    // A simple tap moves forward, unless it's part of a swipe.
+    readerContainer.addEventListener('click', (e) => {
+      if (swiped) {
+        swiped = false;
+        return;
+      }
+      changePage(1); // tap => go forward one page
     });
 
     /********************************************************
