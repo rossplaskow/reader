@@ -29,6 +29,8 @@
       align-items: center;
       box-sizing: border-box;
       padding: 10px;
+      /* Allow vertical scrolling if content exceeds the container */
+      overflow-y: auto;
     }
     .line {
       margin: 0;
@@ -389,11 +391,10 @@
     }
 
     /********************************************************
-     * Updated Touch & Click for Page Navigation
+     * Touch & Click for Page Navigation
      *
-     * - Tap anywhere on the text box to scroll forward (page +1).
-     * - A swipe in any direction (if movement exceeds the threshold)
-     *   scrolls back one page (page -1).
+     * - Tap anywhere on the text box moves forward one page.
+     * - A horizontal swipe (left or right) moves back one page.
      ********************************************************/
 
     let touchStartX = 0, touchStartY = 0;
@@ -405,28 +406,29 @@
       touchStartY = e.touches[0].clientY;
     });
 
-    // When the touch ends, check if the movement qualifies as a swipe.
+    // On touchend, check for a horizontal swipe.
     readerContainer.addEventListener('touchend', (e) => {
       const touchEndX = e.changedTouches[0].clientX;
       const touchEndY = e.changedTouches[0].clientY;
       const deltaX = touchEndX - touchStartX;
       const deltaY = touchEndY - touchStartY;
-      const threshold = 30; // Minimum movement (in pixels) to be considered a swipe
+      const threshold = 30; // Minimum horizontal movement (in pixels) to be considered a swipe
 
-      if (Math.abs(deltaX) > threshold || Math.abs(deltaY) > threshold) {
+      // Only trigger if horizontal movement is significant and greater than vertical movement.
+      if (Math.abs(deltaX) > threshold && Math.abs(deltaX) > Math.abs(deltaY)) {
         swiped = true;
-        changePage(-1); // any swipe gesture => go back one page
+        changePage(-1); // horizontal swipe -> go back one page
         e.preventDefault(); // Prevent the subsequent click event from firing
       }
     });
 
-    // A simple tap moves forward, unless it's part of a swipe.
+    // A simple tap moves forward, unless it was part of a swipe.
     readerContainer.addEventListener('click', (e) => {
       if (swiped) {
         swiped = false;
         return;
       }
-      changePage(1); // tap => go forward one page
+      changePage(1); // tap -> go forward one page
     });
 
     /********************************************************
