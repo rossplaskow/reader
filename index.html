@@ -102,6 +102,16 @@
   <div id="fileListContainer"></div>
 
   <script>
+    const WORDS_PER_PAGE = 21;
+
+    const FILE_NAMES = [
+      "Three-Body-Problem.txt"
+    ];
+
+
+
+    
+    
     /********************************************************
      * Global Variables
      ********************************************************/
@@ -112,9 +122,7 @@
     const fileListContainer = document.getElementById('fileListContainer');
 
     // Hard-coded list of .txt files in your root directory
-    const FILE_NAMES = [
-      "Three-Body-Problem.txt"
-    ];
+
 
     // IndexedDB config
     const DB_NAME = 'myEreaderDB';
@@ -124,7 +132,7 @@
     let db;                // will hold our IndexedDB instance
     let allWords = [];     // Current file's tokens
     let currentPage = 0;
-    const WORDS_PER_PAGE = 23; // 15 tokens per "page"
+
 
     let currentFileName = '';  // Which file is currently loaded
     let storedFiles = [];      // In-memory: [{ name, content, lastPage }, ...]
