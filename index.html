@@ -10,82 +10,100 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <style>
-    /* Dark background, white text */
-    body {
-      margin: 0;
-      font-family: sans-serif;
-      background-color: #000;
-    }
-    #readerContainer {
-      width: 100%;
-      max-width: 600px;
-      margin: 0 auto;
-      /* Increased the min-height from 450px by 25% => ~562px */
-      min-height: 800px;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      align-items: center;
-      box-sizing: border-box;
-      padding: 10px;
-      /* Allow vertical scrolling if content exceeds the container */
-      overflow-y: auto;
-    }
-    .line {
-      margin: 0;
-      text-align: center;
-      word-wrap: break-word;
-      /* Increased from 1.5em by 25% => 1.875em */
-      font-size: 1.4em;
-      color: #730101;
-    }
 
-    .line:nth-child(even) {
-      color: #ff4d4d; /* Lighter red for every second line */
-    }
+/* Dark background, dark red text */
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background-color: #000;
+  color: #730101;
+}
 
-    /* Page number + go button line */
-    #pageJumpContainer {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 10px 0;
-    }
-    #pageJumpContainer input {
-      width: 70px;
-      font-size: 16px;
-      margin-right: 5px;
-      color: #fff;
-      background: #333;
-      border: 1px solid #555;
-      padding: 4px;
-    }
-    #pageJumpContainer button {
-      padding: 8px 14px;
-      font-size: 16px;
-      cursor: pointer;
-      background: #333;
-      color: #fff;
-      border: 1px solid #555;
-    }
+#readerContainer {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  /* Increased the min-height from 450px by 25% => ~562px */
+  min-height: 800px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 10px;
+  /* Allow vertical scrolling if content exceeds the container */
+  overflow-y: auto;
+  position: relative; /* Needed for the gradient overlay */
+}
 
-    #fileListContainer {
-      text-align: center;
-      margin-bottom: 10px;
-    }
-    #fileListContainer button {
-      margin: 3px;
-      padding: 5px 10px;
-      background: #333;
-      color: #fff;
-      border: 1px solid #555;
-      cursor: pointer;
-    }
+/* Gradient overlay to create a dark-to-light red effect */
+#readerContainer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* The gradient goes from dark red to lighter red, with transparency */
+  background: linear-gradient(to right, rgba(115, 1, 1, 0.5), rgba(255, 77, 77, 0.5));
+  pointer-events: none; /* Allows text selection and clicks */
+}
 
-    #pageInfo {
-      text-align: center;
-      margin-bottom: 10px;
-    }
+.line {
+  margin: 0;
+  text-align: center;
+  word-wrap: break-word;
+  /* Increased from 1.5em by 25% => 1.875em */
+  font-size: 1.4em;
+}
+
+/* Page number + go button line */
+#pageJumpContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 10px 0;
+}
+
+#pageJumpContainer input {
+  width: 70px;
+  font-size: 16px;
+  margin-right: 5px;
+  color: #fff;
+  background: #333;
+  border: 1px solid #555;
+  padding: 4px;
+}
+
+#pageJumpContainer button {
+  padding: 8px 14px;
+  font-size: 16px;
+  cursor: pointer;
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+}
+
+#fileListContainer {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+#fileListContainer button {
+  margin: 3px;
+  padding: 5px 10px;
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+  cursor: pointer;
+}
+
+#pageInfo {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+    
   </style>
 </head>
 <body>
