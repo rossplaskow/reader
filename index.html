@@ -15,7 +15,6 @@
       margin: 0;
       font-family: sans-serif;
       background-color: #000;
-      color: #730101;
     }
     #readerContainer {
       width: 100%;
@@ -38,6 +37,11 @@
       word-wrap: break-word;
       /* Increased from 1.5em by 25% => 1.875em */
       font-size: 1.4em;
+      color: #730101;
+    }
+
+    .line:nth-child(even) {
+      color: #ff4d4d; /* Lighter red for every second line */
     }
 
     /* Page number + go button line */
