@@ -11,58 +11,65 @@
 
   <style>
 
-/* Dark background, dark red text */
+
+    /* Global settings: black background, sans-serif font */
 body {
   margin: 0;
   font-family: sans-serif;
   background-color: #000;
-  color: #730101;
 }
 
+/* Reader container: black background with an overlay for gradient effect */
 #readerContainer {
   width: 100%;
   max-width: 600px;
   margin: 0 auto;
-  /* Increased the min-height from 450px by 25% => ~562px */
-  min-height: 800px;
+  min-height: 800px; /* increased min-height */
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
   box-sizing: border-box;
   padding: 10px;
-  /* Allow vertical scrolling if content exceeds the container */
   overflow-y: auto;
-  position: relative; /* Needed for the gradient overlay */
+  position: relative;
+  background-color: #000; /* ensure background remains black */
 }
 
-/* Gradient overlay to create a dark-to-light red effect */
-#readerContainer::before {
+/* Overlay pseudo-element with vertical gradient and blend mode */
+#readerContainer::after {
   content: "";
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  /* The gradient goes from dark red to lighter red, with transparency */
-  background: linear-gradient(to right, rgba(115, 1, 1, 0.5), rgba(255, 77, 77, 0.5));
-  pointer-events: none; /* Allows text selection and clicks */
+  /* Vertical gradient: starts with dark red and transitions to lighter red */
+  background: linear-gradient(to bottom, rgba(115, 1, 1, 0.5), rgba(255, 77, 77, 0.5));
+  mix-blend-mode: screen; /* Blend mode applied to the overlay */
+  pointer-events: none;  /* Allow clicks/selection on text underneath */
+  z-index: 1;
 }
 
+/* Text lines: placed above the overlay */
 .line {
   margin: 0;
   text-align: center;
   word-wrap: break-word;
-  /* Increased from 1.5em by 25% => 1.875em */
   font-size: 1.4em;
+  color: #730101; /* Base dark red */
+  position: relative;
+  z-index: 2; /* Ensure text is above the overlay */
 }
 
-/* Page number + go button line */
+/* Page number + go button container */
 #pageJumpContainer {
   display: flex;
   justify-content: center;
   align-items: center;
   margin: 10px 0;
+  position: relative;
+  z-index: 2;
 }
 
 #pageJumpContainer input {
@@ -84,9 +91,12 @@ body {
   border: 1px solid #555;
 }
 
+/* File list container styling */
 #fileListContainer {
   text-align: center;
   margin-bottom: 10px;
+  position: relative;
+  z-index: 2;
 }
 
 #fileListContainer button {
@@ -98,10 +108,14 @@ body {
   cursor: pointer;
 }
 
+/* Page info styling */
 #pageInfo {
   text-align: center;
   margin-bottom: 10px;
+  position: relative;
+  z-index: 2;
 }
+
 
     
   </style>
