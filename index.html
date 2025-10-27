@@ -6,15 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Tells iOS Safari: open in standalone web-app mode -->
   <meta name="mobile-web-app-capable" content="yes">
-  <!-- Optional: define a default color for the status bar -->
+  <!-- Optional: define a default colour for the status bar -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" type="image/png" href="totem.png">
   <link rel="apple-touch-icon" href="totem.png">
 
-
   <style>
-
-
 /* Global settings: black background, sans-serif font */
 body {
   margin: 0;
@@ -119,9 +116,6 @@ body {
   color: #fff;
   z-index: 20;
 }
-
-
-    
   </style>
 </head>
 <body>
@@ -149,10 +143,6 @@ body {
       "RISE.txt"
     ];
 
-
-
-    
-    
     /********************************************************
      * Global Variables
      ********************************************************/
@@ -161,9 +151,6 @@ body {
     const pageNumberInput = document.getElementById('pageNumberInput');
     const pageInfo = document.getElementById('pageInfo');
     const fileListContainer = document.getElementById('fileListContainer');
-
-    // Hard-coded list of .txt files in your root directory
-
 
     // IndexedDB config
     const DB_NAME = 'myEreaderDB';
@@ -174,30 +161,22 @@ body {
     let allWords = [];     // Current file's tokens
     let currentPage = 0;
 
-
     let currentFileName = '';  // Which file is currently loaded
     let storedFiles = [];      // In-memory: [{ name, content, lastPage }, ...]
 
     /********************************************************
-     * On Page Load (DOMContentLoaded):
-     * 1) Init IndexedDB
-     * 2) Fetch each file & store in DB if possible
-     * 3) Load from DB to build file list
-     * 4) Auto-load the last opened file (if any)
+     * On Page Load (DOMContentLoaded)
      ********************************************************/
     window.addEventListener('DOMContentLoaded', async () => {
-      console.log('[DOMContentLoaded] Initializing IndexedDB...');
+      console.log('[DOMContentLoaded] Initialising IndexedDB...');
       try {
         await initIndexedDB();
         console.log('[DOMContentLoaded] Attempting to fetch files from root...');
-        // 1) Fetch & store files in DB (if online)
-        await fetchAndStoreFiles();
-        // 2) Load the file metadata from DB
-        await loadStoredFilesFromIndexedDB();
-        // 3) Update the file list UI
-        updateFileListUI();
+        await fetchAndStoreFiles();            // 1) fetch & store
+        await loadStoredFilesFromIndexedDB();  // 2) load list
+        updateFileListUI();                    // 3) build UI
 
-        // Auto-load the last opened file from localStorage
+        // Auto-load the last opened file (if any)
         const lastFile = localStorage.getItem('lastOpenedFile');
         if (lastFile) {
           console.log(`[DOMContentLoaded] Auto-loading lastOpenedFile: ${lastFile}`);
@@ -209,7 +188,7 @@ body {
     });
 
     /********************************************************
-     * IndexedDB Initialization
+     * IndexedDB Initialisation
      ********************************************************/
     function initIndexedDB() {
       return new Promise((resolve, reject) => {
@@ -222,7 +201,6 @@ body {
 
         request.onupgradeneeded = (event) => {
           db = event.target.result;
-          // Create the object store if it doesn't exist
           if (!db.objectStoreNames.contains(STORE_NAME)) {
             db.createObjectStore(STORE_NAME, { keyPath: 'name' });
           }
@@ -248,11 +226,10 @@ body {
           const textContent = await response.text();
           console.log(`[fetchAndStoreFiles] Fetched "${fileName}" (length=${textContent.length}).`);
 
-          // 1) Before overwriting, get existing record from DB:
+          // Preserve lastPage if record exists
           const oldRecord = await getFileFromDB(fileName);
           const oldLastPage = oldRecord ? oldRecord.lastPage : 0;
 
-          // 2) Now store updated text, but preserve lastPage:
           await saveFileToIndexedDB(fileName, textContent, oldLastPage);
 
         } catch (err) {
@@ -268,10 +245,8 @@ body {
         const store = tx.objectStore(STORE_NAME);
         const request = store.get(fileName);
         
-        request.onsuccess = () => {
-          resolve(request.result); // Might be undefined if not in DB yet
-        };
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror   = () => reject(request.error);
       });
     }
 
@@ -282,14 +257,9 @@ body {
       return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-
-        // Upsert { name, content, lastPage }
         store.put({ name, content, lastPage });
-
-        tx.oncomplete = () => {
-          resolve();
-        };
-        tx.onerror = () => reject(tx.error);
+        tx.oncomplete = () => resolve();
+        tx.onerror    = () => reject(tx.error);
       });
     }
 
@@ -303,7 +273,7 @@ body {
         const request = store.getAll();
 
         request.onsuccess = () => {
-          storedFiles = request.result; // e.g. [{ name, content, lastPage }, ...]
+          storedFiles = request.result || [];
           console.log(`[loadStoredFilesFromIndexedDB] Found ${storedFiles.length} stored files.`);
           resolve();
         };
@@ -332,8 +302,7 @@ body {
     }
 
     /********************************************************
-     * Load a file by name (from in-memory array),
-     * then display the content
+     * Load a file by name, tokenise, and display
      ********************************************************/
     async function loadFileByName(name) {
       const fileObj = storedFiles.find(item => item.name === name);
@@ -342,28 +311,22 @@ body {
         return;
       }
       currentFileName = name;
-      // Remember which file is open
       localStorage.setItem('lastOpenedFile', currentFileName);
 
       console.log(`[loadFileByName] Loading file "${name}" with lastPage=${fileObj.lastPage}`);
 
-      // Tokenize
       tokenizeAndLoad(fileObj.content);
 
-      // Set currentPage to the saved lastPage
       currentPage = fileObj.lastPage || 0;
       displayPage();
       updatePageInfo();
-
-      // If you want to ensure we store this “entry” page immediately, uncomment:
-      // saveCurrentPage();
     }
 
     /********************************************************
-     * Tokenize & Display
+     * Tokenise & Display
      ********************************************************/
     function tokenizeAndLoad(text) {
-      // 1) Split text into paragraphs by looking for blank lines
+      // Split text into paragraphs by blank lines
       const paragraphs = text.split(/\r?\n\r?\n+/);
 
       let combinedTokens = [];
@@ -371,13 +334,13 @@ body {
       paragraphs.forEach(par => {
         const trimmedPar = par.trim();
         if (trimmedPar) {
-          // 2) Regex that keeps hyphenated words together
+          // Regex that keeps hyphenated words together
           const pTokens = trimmedPar.match(/[^\s–—]+(?:-[^\s–—]+)*|[–—]+|-+/g);
           if (pTokens) {
             combinedTokens.push(...pTokens);
           }
         }
-        // 3) Add empty string to represent blank line
+        // Add empty string to represent blank line
         combinedTokens.push("");
       });
 
@@ -390,7 +353,6 @@ body {
       console.log(`[tokenizeAndLoad] Found ${allWords.length} tokens (incl. blank lines).`);
     }
 
-    // Build the page of text
     function displayPage() {
       readerContainer.innerHTML = '';
 
@@ -403,10 +365,8 @@ body {
         p.className = 'line';
 
         if (word === "") {
-          // This represents a blank line
-          p.innerHTML = "&nbsp;";
+          p.innerHTML = "&nbsp;"; // blank line
         } else {
-          // Bold the first character
           p.innerHTML = makeFirstCharacterBold(word);
         }
         readerContainer.appendChild(p);
@@ -416,24 +376,28 @@ body {
     }
 
     function makeFirstCharacterBold(word) {
-      return word;
+      return word; // currently not bolding first character
     }
 
     /********************************************************
      * Touch & Click for Page Navigation
      *
-     * - Tap anywhere on the text box moves forward one page.
-     * - A horizontal swipe (left or right) moves back one page.
+     * Tap anywhere on the text box moves forward one page (via click).
+     * A horizontal swipe (left or right) moves back one page (via touchend).
+     * We suppress only the *ghost click* that follows a swipe.
      ********************************************************/
 
     let touchStartX = 0, touchStartY = 0;
-    let swiped = false;
+
+    // NEW: timestamp-based ghost-click suppression
+    let lastSwipeAt = 0;
+    const SWIPE_GHOST_CLICK_MS = 350; // ignore clicks that happen right after a swipe
 
     // Record the starting touch coordinates.
     readerContainer.addEventListener('touchstart', (e) => {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
-    });
+    }, { passive: true });
 
     // On touchend, check for a horizontal swipe.
     readerContainer.addEventListener('touchend', (e) => {
@@ -441,23 +405,20 @@ body {
       const touchEndY = e.changedTouches[0].clientY;
       const deltaX = touchEndX - touchStartX;
       const deltaY = touchEndY - touchStartY;
-      const threshold = 30; // Minimum horizontal movement (in pixels) to be considered a swipe
+      const threshold = 30; // Minimum horizontal movement (px) to be considered a swipe
 
-      // Only trigger if horizontal movement is significant and greater than vertical movement.
+      // Trigger only if horizontal movement is significant and greater than vertical movement.
       if (Math.abs(deltaX) > threshold && Math.abs(deltaX) > Math.abs(deltaY)) {
-        swiped = true;
-        changePage(-1); // horizontal swipe -> go back one page
-        e.preventDefault(); // Prevent the subsequent click event from firing
+        changePage(-1);                // swipe => go back one page
+        lastSwipeAt = Date.now();      // mark when we swiped
+        e.preventDefault();            // try to stop the ghost click
       }
     });
 
-    // A simple tap moves forward, unless it was part of a swipe.
+    // A simple tap (click) moves forward, unless it's the ghost click after a swipe.
     readerContainer.addEventListener('click', (e) => {
-      if (swiped) {
-        swiped = false;
-        return;
-      }
-      changePage(1); // tap -> go forward one page
+      if (Date.now() - lastSwipeAt < SWIPE_GHOST_CLICK_MS) return; // ignore ghost click
+      changePage(1); // real tap => go forward one page
     });
 
     /********************************************************
@@ -477,7 +438,7 @@ body {
     });
 
     /********************************************************
-     * Updated Pagination
+     * Pagination helpers
      ********************************************************/
     function changePage(delta) {
       const totalPages = Math.ceil(allWords.length / WORDS_PER_PAGE);
@@ -500,7 +461,6 @@ body {
         console.warn('[saveCurrentPage] No currentFileName set; cannot save page.');
         return;
       }
-      // Update in storedFiles
       const idx = storedFiles.findIndex(item => item.name === currentFileName);
       if (idx < 0) {
         console.warn(`[saveCurrentPage] Could not find file "${currentFileName}" in storedFiles array.`);
@@ -508,7 +468,6 @@ body {
       }
       storedFiles[idx].lastPage = currentPage;
 
-      // Also update in DB
       saveFileToIndexedDB(
         currentFileName,
         storedFiles[idx].content,
